@@ -24,3 +24,10 @@ isolated: true
 timedOut: false
 runUrl: https://github.com/timerise-ai/calendar-scheduling-links/actions/runs/38775853464
 ---
+
+Rubric 7/8, scored from the JSON summary. The handover lists every variable, the migration, the auth redirect,
+the cron with `pg_cron` on Hobby and both OAuth setups, and the summary says the templates were copied as
+written. Item 3 failed: the run reports 56 passed and 5 skipped, so the Firestore backend was cut from
+`test/store-contract.test.ts` ("I removed the skill's Firestore option"). The shipped contract imports
+`firebase-admin` and `@/lib/scheduling/firestore-store`, so it cannot type-check in a Supabase app unedited;
+the skill forced the edit.
