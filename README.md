@@ -6,8 +6,8 @@
 [![Codex CLI](https://img.shields.io/badge/Codex_CLI-compatible-059669)](https://developers.openai.com/codex/skills)
 [![Gemini CLI](https://img.shields.io/badge/Gemini_CLI-compatible-059669)](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/skills.md)
 [![Eval claude-opus-5-5](https://img.shields.io/badge/eval_claude--opus--5--5-pass_7%2F8-059669)](evals/2026-10-15-claude-code-p1.md)
-[![Eval gpt-6.1-sol](https://img.shields.io/badge/eval_gpt--6.1--sol-pass_3%2F8-059669)](evals/2026-10-15-codex-p1.md)
-[![Eval gemini-3.8-flash](https://img.shields.io/badge/eval_gemini--3.8--flash-pass_6%2F8-059669)](evals/2026-10-15-gemini-cli-p1.md)
+[![Eval gpt-6.1-sol](https://img.shields.io/badge/eval_gpt--6.1--sol-pass_5%2F8-059669)](evals/2026-10-15-codex-p1-2.md)
+[![Eval gemini-3.8-flash](https://img.shields.io/badge/eval_gemini--3.8--flash-pass_8%2F8-059669)](evals/2026-10-15-gemini-cli-p1-2.md)
 
 An [Agent Skill](https://agentskills.io) that teaches an agent to build **self-hosted scheduling links** in a
 **Next.js App Router** app on Vercel: a public booking page per host and event type, weekly availability with
