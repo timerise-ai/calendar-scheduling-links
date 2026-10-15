@@ -14,6 +14,7 @@ Every route is a thin shell: parse, call one service function, map errors. The s
 | `/api/scheduling/cron` | GET | `CRON_SECRET` | Jobs, watch renewal, calendar sync |
 | `/api/scheduling/calendar/[provider]/connect` | GET | Signed-in host | Redirects to consent |
 | `/api/scheduling/calendar/[provider]/callback` | GET | Signed-in host | Stores the connection, first sync, watches |
+| `/api/scheduling/calendar/connections/[id]` | DELETE | Signed-in host | Stops the channels, deletes the connection |
 | `/api/scheduling/calendar/google/notify` | POST | Google | Verifies the channel token, asks for a sync |
 | `/api/scheduling/calendar/microsoft/notify` | POST | Microsoft | Validation handshake, then the same |
 
@@ -204,8 +205,7 @@ import { listSlots } from '@/lib/scheduling/booking-service';
 import { errorResponse } from '@/lib/scheduling/http';
 import { serviceDeps } from '@/lib/scheduling/runtime';
 
-export const dynamic = 'force-dynamic';
-
+// No `export const dynamic`: cacheComponents refuses it, and reading the request already keeps this per call.
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
   const from = new Date(q.get('from') ?? '');
@@ -413,6 +413,28 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
     console.error('[scheduling] connect', err);
     return back('failed');
   }
+}
+```
+
+```ts
+// app/api/scheduling/calendar/connections/[id]/route.ts: the host disconnects a calendar. DELETE, not a GET
+// link: a cross-site form cannot send it, and a cross-site fetch needs a preflight this route never grants.
+import { NextResponse, type NextRequest } from 'next/server';
+import { disconnectCalendar } from '@/lib/scheduling/calendar/sync';
+import { currentHostId } from '@/lib/scheduling/host';
+import { syncDeps } from '@/lib/scheduling/runtime';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const hostId = await currentHostId();
+  if (!hostId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  // Another host's connection answers like a missing one, so ids cannot be probed.
+  if (!UUID.test(id) || !(await disconnectCalendar(syncDeps(), hostId, id))) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
+  return new NextResponse(null, { status: 204 });
 }
 ```
 

@@ -2,7 +2,9 @@
 
 The second store, for hosts on Firebase. It implements `SchedulingStore` with `firebase-admin`; the calendar
 store (`CalendarStore`) is not shipped for Firestore in this release: implement it from the Supabase version
-in [supabase.md](supabase.md), against the same interface in [calendar-sync.md](calendar-sync.md).
+in [supabase.md](supabase.md), against the same interface in [calendar-sync.md](calendar-sync.md). Firestore
+has no cascading delete, so its `deleteConnection` must delete the connection's watches and `busyBlocks`
+itself, in one batch with the connection.
 
 ## How it keeps the guarantees without SQL
 

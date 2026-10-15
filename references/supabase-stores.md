@@ -388,6 +388,10 @@ export function supabaseCalendarStore(db: SupabaseClient = supabaseAdmin()): Cal
     async deleteWatch(channelId) {
       must(await db.from('calendar_watches').delete().eq('channel_id', channelId));
     },
+    async deleteConnection(id) {
+      // Watches and busy blocks reference the connection with on delete cascade, so one statement removes all.
+      must(await db.from('calendar_connections').delete().eq('id', id));
+    },
   };
 }
 ```

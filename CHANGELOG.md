@@ -18,12 +18,13 @@ First release: self-hosted scheduling links for Next.js App Router on Vercel, wi
   atomic SQL functions; booking and calendar stores (`supabase.md`).
 - Firestore: the booking store with a per-host lock document, indexes and rules (`firestore.md`).
 - Jobs for e-mail with ICS, reminders, calendar writes and signed webhooks, with leases and backoff
-  (`jobs-and-notifications.md`).
+  (`jobs-and-notifications.md`); webhook delivery only to checked public addresses, pinned against DNS
+  rebinding (`webhooks.md`).
 - Google Calendar and Microsoft 365 sync: OAuth with signed state and PKCE, sealed tokens, mirrored busy
-  time, watches, write-back on the booking's chain (`calendar-sync.md`).
+  time, watches, write-back on the booking's chain, disconnect (`calendar-sync.md`).
 - Routes, the public page, the widget, the manage page and the embed script (`api-routes.md`,
   `booking-page-ui.md`).
 - Operations for Vercel Cron and Supabase `pg_cron`, provider setup and monitoring (`operations.md`).
 - Extensions with prompts (`extensions.md`), the seam contract (`adaptation.md`), the audit ledger
   (`provenance.md`).
-- Five suites: 47 unit tests and a 5-test store contract run on local Supabase and the Firestore emulator.
+- Five suites: 51 unit tests and a 5-test store contract run on local Supabase and the Firestore emulator.

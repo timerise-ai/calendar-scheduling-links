@@ -16,6 +16,8 @@ write     job calendar.upsert / calendar.delete           event id derived from 
                                                           reschedule patches the same event
 watch     ensureWatches after connect                     one channel per checked calendar; renewWatches
           renewWatches in the cron                        opens the new one before stopping the old
+remove    DELETE /api/scheduling/calendar/connections/<id> stop the channels, then delete the connection
+                                                          with its watches, busy blocks and tokens
 ```
 
 Busy time is mirrored, not fetched per request: a slot query reads `busy_blocks` and never waits on Google or
@@ -123,6 +125,8 @@ export interface CalendarStore {
   getWatchByChannel(channelId: string): Promise<Watch | null>;
   saveWatch(w: Omit<Watch, 'id'>): Promise<void>;
   deleteWatch(channelId: string): Promise<void>;
+  /** Deletes the connection with its watches and busy blocks, sealed tokens included. */
+  deleteConnection(id: string): Promise<void>;
 }
 ```
 
@@ -436,6 +440,31 @@ export function calendarWriter(deps: SyncDeps): CalendarWriter {
   };
 }
 
+/**
+ * Disconnects one of the host's calendars: stops its watches at the provider, then deletes the connection,
+ * which takes its watches, busy blocks and sealed tokens with it. Returns false when the connection is not
+ * this host's, so the route answers the same as for a missing one.
+ *
+ * Stopping is best effort. A revoked grant has no token to stop with, and must not keep the host from
+ * removing the connection. A channel left running expires on its own within days, and its notifications
+ * are refused, because its watch row is gone.
+ */
+export async function disconnectCalendar(deps: SyncDeps, hostId: string, connectionId: string): Promise<boolean> {
+  const c = await deps.calendars.getConnection(connectionId);
+  if (!c || c.hostId !== hostId) return false;
+  const watches = await deps.calendars.listWatches(c.id);
+  if (watches.length > 0 && c.status === 'active') {
+    try {
+      const token = await accessToken(deps, c);
+      for (const w of watches) await PROVIDERS[c.provider].stopWatch(token, w).catch(() => undefined);
+    } catch {
+      // No usable token: the channels expire on their own.
+    }
+  }
+  await deps.calendars.deleteConnection(c.id);
+  return true;
+}
+
 /** The cron's calendar pass: renew watches, then sync what asked for it or went stale. */
 export async function runCalendarCron(deps: SyncDeps, limit = 20): Promise<{ renewed: number; synced: number; failed: number }> {
   const renewed = await renewWatches(deps);
@@ -469,6 +498,9 @@ export async function runCalendarCron(deps: SyncDeps, limit = 20): Promise<{ ren
 | Channel tokens are signed and bound to their channel id | A token copied from another channel is refused. |
 | Renewal opens the new watch before stopping the old one | No change falls into a gap between them. Overlap only means a duplicate notice, and the lease absorbs it. |
 | Notification routes answer at once and sync after | Graph expects an answer within seconds, and Google retries a slow one. |
+| Disconnecting stops the channels first, then deletes the connection, and does not fail on a dead grant | A deleted row with live channels leaves the provider calling for days; a host who cannot remove a revoked connection is stuck with it. |
+| Disconnecting does not revoke the grant at the provider | Google's revoke ends the grant for the whole account, so it would also cut off another host who connected the same account. The tokens are deleted, so nothing usable is left. The host can remove the app in their Google or Microsoft account settings. |
+| Events already written stay in the host's calendar | The host may still rely on them. Later changes to those bookings no longer reach that calendar. |
 
 ## Provider setup
 

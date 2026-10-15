@@ -178,16 +178,29 @@ describe('booking', () => {
 ## Edges
 
 ```ts
-// test/edges.test.ts: ICS, webhook signatures and the SSRF guard, tokens, sealing, provider normalization.
-import { describe, expect, it } from 'vitest';
+// test/edges.test.ts: ICS, webhook signatures and the SSRF guard, tokens, sealing, provider normalization,
+// calendar disconnect.
+import type { LookupAddress } from 'node:dns';
+import { isIP } from 'node:net';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { googleEventId, googleEventsToBusy, OWN_EVENT_KEY } from '@/lib/scheduling/calendar/google';
 import { graphEventsToBusy } from '@/lib/scheduling/calendar/microsoft';
-import { channelToken, readChannelToken } from '@/lib/scheduling/calendar/sync';
+import { PROVIDERS } from '@/lib/scheduling/calendar/oauth';
+import { channelToken, disconnectCalendar, readChannelToken, type SyncDeps } from '@/lib/scheduling/calendar/sync';
+import { ReauthRequired, type Connection, type Watch } from '@/lib/scheduling/calendar/types';
 import { decryptSecret, encryptSecret } from '@/lib/scheduling/crypto';
 import { buildIcs, escapeText, fold } from '@/lib/scheduling/ics';
 import { isAuthorizedCron, manageTokenFor, signValue, verifySignedValue } from '@/lib/scheduling/tokens';
-import { assertPublicUrl, isPrivateAddress, signatureHeader, verifySignature } from '@/lib/scheduling/webhooks';
-import { TZ } from './fixtures';
+import {
+  assertPublicUrl,
+  isPrivateAddress,
+  pinnedLookup,
+  resolvePublicUrl,
+  signatureHeader,
+  verifySignature,
+  type Resolver,
+} from '@/lib/scheduling/webhooks';
+import { memoryCalendars, memoryStore, TZ } from './fixtures';
 
 const now = new Date('2026-10-12T06:00:00Z');
 
@@ -238,17 +251,84 @@ describe('webhooks', () => {
     expect(verifySignature('whsec', body, header, new Date(now.getTime() + 10 * 60_000))).toBe(false);
   });
 
-  it('treats private, loopback, link-local, CGNAT and mapped addresses as private', () => {
-    for (const ip of ['10.0.0.1', '127.0.0.1', '169.254.169.254', '172.16.0.1', '192.168.1.1', '100.64.0.1', '::1', 'fd00::1', 'fe80::1', '::ffff:127.0.0.1']) {
-      expect(isPrivateAddress(ip)).toBe(true);
-    }
-    expect(isPrivateAddress('93.184.216.34')).toBe(false);
+  it('treats private, loopback, link-local, CGNAT, mapped and embedding addresses as private', () => {
+    const blocked = [
+      '10.0.0.1', '127.0.0.1', '169.254.169.254', '172.16.0.1', '192.168.1.1', '100.64.0.1', '0.0.0.0', '::', '::1',
+      'fd00::1', 'fe80::1', '::ffff:127.0.0.1', '::ffff:7f00:1', '::ffff:a9fe:a9fe', '64:ff9b::7f00:1', '2002:7f00:1::1', 'not-an-ip',
+    ];
+    for (const ip of blocked) expect(isPrivateAddress(ip), ip).toBe(true);
+    for (const ip of ['93.184.216.34', '1.1.1.1', '2606:4700:4700::1111', '::ffff:5db8:d822']) expect(isPrivateAddress(ip), ip).toBe(false);
   });
 
-  it('refuses http and literal private hosts before any request', async () => {
+  it('refuses http, credentials and private hosts in every spelling, before any request', async () => {
     await expect(assertPublicUrl('http://example.com/hook')).rejects.toThrow('https');
-    await expect(assertPublicUrl('https://169.254.169.254/latest')).rejects.toThrow('private');
-    await expect(assertPublicUrl('https://[::1]/x')).rejects.toThrow('private');
+    await expect(assertPublicUrl('https://user:pw@example.com/hook')).rejects.toThrow('credentials');
+    // new URL rewrites these to [::ffff:7f00:1], [::ffff:a9fe:a9fe] and 127.0.0.1 before the check sees them.
+    for (const url of ['https://169.254.169.254/latest', 'https://[::1]/x', 'https://[::ffff:127.0.0.1]/x', 'https://[::ffff:169.254.169.254]/x', 'https://2130706433/x', 'https://0x7f.1/x']) {
+      await expect(assertPublicUrl(url), url).rejects.toThrow('private');
+    }
+  });
+
+  it('refuses a hostname when any of its addresses is private, and keeps the ones it checked', async () => {
+    const resolveTo = (...ips: string[]): Resolver => async () => ips.map(address => ({ address, family: isIP(address) }));
+    await expect(resolvePublicUrl('https://hook.example.com/x', resolveTo('93.184.216.34', '10.0.0.5'))).rejects.toThrow('private');
+    await expect(resolvePublicUrl('https://hook.example.com/x', resolveTo())).rejects.toThrow('private');
+    const target = await resolvePublicUrl('https://hook.example.com/x', resolveTo('93.184.216.34'));
+    expect(target.addresses).toEqual([{ address: '93.184.216.34', family: 4 }]);
+  });
+
+  it('connects to the checked address, whatever a second lookup would answer', async () => {
+    const lookup = pinnedLookup([{ address: '93.184.216.34', family: 4 }]);
+    const one = await new Promise(resolve => lookup('rebind.example.com', {}, (err, address, family) => resolve({ err, address, family })));
+    expect(one).toEqual({ err: null, address: '93.184.216.34', family: 4 });
+    const all = await new Promise<string | LookupAddress[]>(resolve => lookup('rebind.example.com', { all: true }, (_err, address) => resolve(address)));
+    expect(all).toEqual([{ address: '93.184.216.34', family: 4 }]);
+  });
+});
+
+describe('calendar disconnect', () => {
+  const HOUR = 3_600_000;
+  const connection = (over: Partial<Connection> = {}): Connection => ({
+    id: 'c1',
+    hostId: 'h1',
+    provider: 'google',
+    accountEmail: 'ana@example.com',
+    accessTokenEnc: encryptSecret('access-1'),
+    refreshTokenEnc: encryptSecret('refresh-1'),
+    accessExpiresAt: new Date(now.getTime() + HOUR),
+    status: 'active',
+    checkCalendarIds: ['primary'],
+    writeCalendarId: 'primary',
+    syncedAt: null,
+    ...over,
+  });
+  const watch: Watch = { id: 'w1', connectionId: 'c1', calendarId: 'primary', channelId: 'ch1', resourceId: 'r1', expiresAt: new Date(now.getTime() + 24 * HOUR) };
+  const depsFor = (m: ReturnType<typeof memoryCalendars>): SyncDeps => ({ calendars: m.calendars, store: memoryStore().store, now: () => now, appUrl: 'https://book.example.com' });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('stops the channels, then deletes the connection with its watches and busy time', async () => {
+    const m = memoryCalendars([connection()], [watch]);
+    await m.calendars.replaceBusy('c1', 'h1', [{ start: now, end: new Date(now.getTime() + HOUR) }]);
+    const stop = vi.spyOn(PROVIDERS.google, 'stopWatch').mockResolvedValue(undefined);
+    expect(await disconnectCalendar(depsFor(m), 'h1', 'c1')).toBe(true);
+    expect(stop).toHaveBeenCalledWith('access-1', expect.objectContaining({ channelId: 'ch1', resourceId: 'r1' }));
+    expect(await m.calendars.getConnection('c1')).toBeNull();
+    expect(await m.calendars.getWatchByChannel('ch1')).toBeNull();
+    expect(m.busy).toHaveLength(0);
+  });
+
+  it("refuses another host's connection, and still removes one whose grant is dead", async () => {
+    const m = memoryCalendars([connection({ accessExpiresAt: new Date(now.getTime() - 1) })], [watch]);
+    const stop = vi.spyOn(PROVIDERS.google, 'stopWatch').mockResolvedValue(undefined);
+    vi.spyOn(PROVIDERS.google, 'refresh').mockRejectedValue(new ReauthRequired('invalid_grant'));
+    expect(await disconnectCalendar(depsFor(m), 'h2', 'c1')).toBe(false);
+    expect(await m.calendars.getConnection('c1')).not.toBeNull();
+    expect(await disconnectCalendar(depsFor(m), 'h1', 'c1')).toBe(true);
+    expect(stop).not.toHaveBeenCalled();
+    expect(await m.calendars.getConnection('c1')).toBeNull();
   });
 });
 

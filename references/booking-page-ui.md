@@ -19,17 +19,35 @@ purpose.
 The `/[handle]` segment sits at the root of the app. If the host app already uses root segments, mount it
 under a prefix such as `/book/[handle]/[eventSlug]` and change the manage link in `runner.ts` with it.
 
+Both pages read the database inside `<Suspense>` after `await connection()`. That builds with
+`cacheComponents: true`, which the current `create-next-app` template turns on and which refuses
+`export const dynamic`, and keeps the pages per request in apps without it. A missing handle or token still
+renders the not-found page, but once the shell has streamed, the status is 200 with a `noindex` tag rather
+than 404.
+
 ## Public page
 
 ```tsx
 // app/[handle]/[eventSlug]/page.tsx: the public booking page, /ana/intro. Server component.
 import { notFound } from 'next/navigation';
+import { connection } from 'next/server';
+import { Suspense } from 'react';
 import { BookingWidget } from '@/components/scheduling/booking-widget';
 import { serviceDeps } from '@/lib/scheduling/runtime';
 
-export const dynamic = 'force-dynamic';
+type Props = { params: Promise<{ handle: string; eventSlug: string }>; searchParams: Promise<{ embed?: string }> };
 
-export default async function BookingPage({ params, searchParams }: { params: Promise<{ handle: string; eventSlug: string }>; searchParams: Promise<{ embed?: string }> }) {
+export default function BookingPage(props: Props) {
+  return (
+    <Suspense fallback={<main aria-busy="true" />}>
+      <BookingPageContent {...props} />
+    </Suspense>
+  );
+}
+
+async function BookingPageContent({ params, searchParams }: Props) {
+  // Read per request, never prerendered or cached, with or without cacheComponents.
+  await connection();
   const { handle, eventSlug } = await params;
   const { store } = serviceDeps();
   const host = await store.getHostByHandle(handle);
@@ -256,16 +274,29 @@ export function BookingWidget({ eventTypeId, questions, horizonDays, embedded = 
 // app/booking/[token]/page.tsx: the invitee's manage page from the e-mail link. No login: the token is it.
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { connection } from 'next/server';
+import { Suspense } from 'react';
 import { BookingWidget } from '@/components/scheduling/booking-widget';
 import { CancelForm } from '@/components/scheduling/cancel-form';
 import { bookingForToken } from '@/lib/scheduling/booking-service';
 import { serviceDeps } from '@/lib/scheduling/runtime';
 
-export const dynamic = 'force-dynamic';
 // Never indexed, and the token never leaves in a Referer header.
 export const metadata: Metadata = { robots: { index: false, follow: false }, referrer: 'no-referrer' };
 
-export default async function ManagePage({ params }: { params: Promise<{ token: string }> }) {
+type Props = { params: Promise<{ token: string }> };
+
+export default function ManagePage(props: Props) {
+  return (
+    <Suspense fallback={<main aria-busy="true" />}>
+      <ManagePageContent {...props} />
+    </Suspense>
+  );
+}
+
+async function ManagePageContent({ params }: Props) {
+  // The booking changes on every cancel and reschedule: never serve a cached copy.
+  await connection();
   const { token } = await params;
   const deps = serviceDeps();
   const booking = await bookingForToken(deps, token).catch(() => null);

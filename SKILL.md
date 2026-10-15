@@ -15,7 +15,7 @@ description: >
   reschedule link, cancel link, embed widget, booking webhook, double booking, DST, exclusion constraint,
   btree_gist, pg_cron. Carries one pure slot engine that the page and the write both call, a per-host lock
   with a Postgres exclusion constraint, side effects as leased idempotent jobs, sealed OAuth tokens, signed
-  state and channel tokens, and 47 unit tests plus a store contract run on Supabase and the Firestore
+  state and channel tokens, and 51 unit tests plus a store contract run on Supabase and the Firestore
   emulator. Next.js App Router on Vercel; Supabase by default, Firestore behind the same SchedulingStore
   seam. Not payments, not team round robin in this release, not a video meeting service.
 ---
@@ -145,8 +145,8 @@ list the environment variables and the provider setup the operator still has to 
 | Supabase store code | supabaseStore, supabaseCalendarStore, rpc, row mapping, PostgREST | [supabase-stores.md](references/supabase-stores.md) |
 | Firestore | firebase-admin, transaction, lock document, indexes, emulator | [firestore.md](references/firestore.md) |
 | E-mail, ICS, reminders | jobs, outbox, retry, backoff, lease, SendGrid, ICS, UID, SEQUENCE, METHOD | [jobs-and-notifications.md](references/jobs-and-notifications.md) |
-| Outgoing webhooks | webhook, HMAC, Scheduling-Signature, SSRF, private address, redirect | [webhooks.md](references/webhooks.md) |
-| Calendar connection and sync | OAuth, PKCE, signed state, refresh token, invalid_grant, busy_blocks, watch renewal | [calendar-sync.md](references/calendar-sync.md) |
+| Outgoing webhooks | webhook, HMAC, Scheduling-Signature, SSRF, private address, BlockList, ::ffff, DNS rebinding, redirect | [webhooks.md](references/webhooks.md) |
+| Calendar connection and sync | OAuth, PKCE, signed state, refresh token, invalid_grant, busy_blocks, watch renewal, disconnect | [calendar-sync.md](references/calendar-sync.md) |
 | Google and Microsoft APIs | events.list, calendarView, events.insert, transactionId, subscription, clientState, showAs | [calendar-providers.md](references/calendar-providers.md) |
 | Routes and secrets | route handler, after(), CRON_SECRET, AES-GCM, currentHostId | [api-routes.md](references/api-routes.md) |
 | Pages, widget, embed, dashboard | booking page, iframe, postMessage, manage page, aria | [booking-page-ui.md](references/booking-page-ui.md) |

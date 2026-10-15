@@ -9,10 +9,10 @@ Supabase when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set.
 | `test/time.test.ts` | 8 | Wall clock to instant in both DST directions, `24:00`, a 5:45 offset, date arithmetic, validation |
 | `test/slot-engine.test.ts` | 13 | Rules, notice, horizon, overrides, cross-type conflicts, buffers adding up, busy time, seats, daily limit, the spring-forward walk, the fall-back day, page-and-write agreement, the candidate cap |
 | `test/booking.test.ts` | 12 | Token hash only, answer filtering, off-grid refusal, one winner of two, input validation, jobs written with the booking and sent once, HTML escaping, retry with backoff, atomic reschedule on one chain, the old booking kept on refusal, cancel by token, stale reminders skipped, group seats |
-| `test/edges.test.ts` | 14 | ICS UID, SEQUENCE, CANCEL, escaping and folding; webhook signatures and the private-address guard; derived tokens, fail-closed cron auth, signed values, channel token length, sealed secrets; Google and Graph normalization; Google event ids |
+| `test/edges.test.ts` | 18 | ICS UID, SEQUENCE, CANCEL, escaping and folding; webhook signatures; the private-address guard in every spelling `new URL` produces, every resolved address checked, the connection pinned to them; derived tokens, fail-closed cron auth, signed values, channel token length, sealed secrets; Google and Graph normalization; Google event ids; calendar disconnect, for its own host only and with a dead grant |
 | `test/store-contract.test.ts` | 5 per store | Booking and refusals, four concurrent requests with one winner, group seats with a daily limit, reschedule into an overlap, job leases |
 
-47 unit tests, plus 5 contract tests for each store that runs.
+51 unit tests, plus 5 contract tests for each store that runs.
 
 ## Setup
 
@@ -39,8 +39,9 @@ The in-memory store refuses exactly what the SQL functions refuse, so service te
 real stores.
 
 ```ts
-// test/fixtures.ts: an in-memory SchedulingStore with the same refusals as the SQL functions, a recording
-// mailer and calendar, and a movable clock.
+// test/fixtures.ts: an in-memory SchedulingStore with the same refusals as the SQL functions, an in-memory
+// CalendarStore, a recording mailer and calendar, and a movable clock.
+import type { CalendarStore, Connection, Watch } from '@/lib/scheduling/calendar/types';
 import type { CalendarWriter } from '@/lib/scheduling/calendar/writer';
 import type { JobInput, JobRecord } from '@/lib/scheduling/jobs';
 import type { MailMessage, Mailer } from '@/lib/scheduling/mailer';
@@ -195,6 +196,72 @@ export function memoryStore(eventTypes: EventType[] = [eventType()]) {
     },
   };
   return { store, bookings, jobs, busy, endpoints };
+}
+
+/** Deleting a connection takes its watches and busy blocks with it, as the foreign keys do in Postgres. */
+export function memoryCalendars(initial: Connection[] = [], initialWatches: Watch[] = []) {
+  const connections = new Map(initial.map(c => [c.id, structuredClone(c)]));
+  const watches = new Map(initialWatches.map(w => [w.channelId, structuredClone(w)]));
+  const busy: (Interval & { connectionId: string; hostId: string })[] = [];
+  const requested = new Set<string>();
+  const leases = new Map<string, number>();
+  let seq = 0;
+  const dropBusy = (connectionId: string) => busy.splice(0, busy.length, ...busy.filter(b => b.connectionId !== connectionId));
+
+  const calendars: CalendarStore = {
+    async listConnections(hostId) { return [...connections.values()].filter(c => c.hostId === hostId).map(c => structuredClone(c)); },
+    async getConnection(id) { const c = connections.get(id); return c ? structuredClone(c) : null; },
+    async saveConnection({ defaultCalendarId, ...input }) {
+      const existing = [...connections.values()].find(c => c.hostId === input.hostId && c.provider === input.provider && c.accountEmail === input.accountEmail);
+      const c: Connection = existing
+        ? { ...existing, ...input, status: 'active' }
+        : { ...input, id: `c${++seq}`, status: 'active', checkCalendarIds: defaultCalendarId ? [defaultCalendarId] : [], writeCalendarId: defaultCalendarId, syncedAt: null };
+      connections.set(c.id, c);
+      return structuredClone(c);
+    },
+    async updateTokens(id, prev, next) {
+      const c = connections.get(id);
+      if (!c || c.accessExpiresAt.getTime() !== prev.getTime()) return false;
+      Object.assign(c, next);
+      return true;
+    },
+    async markNeedsReauth(id) {
+      const c = connections.get(id);
+      if (c) c.status = 'needs_reauth';
+      dropBusy(id);
+    },
+    async requestSync(id) { requested.add(id); },
+    async listDueSync(_now, staleBefore, limit) {
+      return [...connections.values()].filter(c => requested.has(c.id) || !c.syncedAt || c.syncedAt < staleBefore).slice(0, limit).map(c => c.id);
+    },
+    async claimSync(id, now, leaseSeconds) {
+      const c = connections.get(id);
+      if (!c || (leases.get(id) ?? 0) > now.getTime()) return null;
+      leases.set(id, now.getTime() + leaseSeconds * 1000);
+      requested.delete(id);
+      return structuredClone(c);
+    },
+    async finishSync(id, now, error) {
+      leases.delete(id);
+      const c = connections.get(id);
+      if (c && !error) c.syncedAt = now;
+    },
+    async replaceBusy(connectionId, hostId, list) {
+      dropBusy(connectionId);
+      busy.push(...list.map(i => ({ ...i, connectionId, hostId })));
+    },
+    async listWatches(connectionId) { return [...watches.values()].filter(w => w.connectionId === connectionId); },
+    async listWatchesExpiring(before, limit) { return [...watches.values()].filter(w => w.expiresAt < before).slice(0, limit); },
+    async getWatchByChannel(channelId) { return watches.get(channelId) ?? null; },
+    async saveWatch(w) { watches.set(w.channelId, { ...w, id: w.channelId }); },
+    async deleteWatch(channelId) { watches.delete(channelId); },
+    async deleteConnection(id) {
+      connections.delete(id);
+      for (const w of [...watches.values()]) if (w.connectionId === id) watches.delete(w.channelId);
+      dropBusy(id);
+    },
+  };
+  return { calendars, connections, watches, busy };
 }
 
 export function recordingMailer(failTimes = 0) {

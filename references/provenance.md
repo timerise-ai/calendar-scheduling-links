@@ -8,7 +8,7 @@ scheduling-link products the module is an alternative to; the behaviour came fro
 implementation and from the audit.
 
 This file is the ledger: what the audit changed and how the templates verify it, what was kept deliberately
-and why, and what was designed here and has never run in production. 38 entries.
+and why, and what was designed here and has never run in production. 39 entries.
 
 ## Fixed in the templates
 
@@ -71,9 +71,11 @@ and why, and what was designed here and has never run in production. 38 entries.
     manage token.
 22. **Outgoing webhooks were unsigned and tried once.** HMAC signature with a timestamp, retries with backoff,
     a stable id per delivery.
-23. **The webhook URL guard followed redirects, allowed a failed DNS lookup, and missed IPv6 private ranges
-    and
-    CGNAT.** `redirect: 'manual'`, refusal on lookup failure, the wider range list, and a test for each range.
+23. **The webhook URL guard followed redirects, allowed a failed DNS lookup, missed IPv6 private ranges and
+    CGNAT, and resolved the name again to connect.** Redirects are not followed, a failed lookup refuses, and
+    a `BlockList` checks every address, including IPv4-mapped ones in the hex spelling `new URL` produces
+    (`[::ffff:7f00:1]`). The connection goes to the checked addresses, so DNS rebinding cannot swap them. A
+    test covers each range and spelling ([webhooks.md](webhooks.md)).
 
 ### Calendar
 
@@ -104,16 +106,21 @@ and why, and what was designed here and has never run in production. 38 entries.
     channel and is checked against it.
 35. **The cron route accepted any request when its secret was unset, and compared in non-constant time.**
     `isAuthorizedCron` fails closed and uses `timingSafeEqual`; a test passes an unset secret.
+36. **Removing a calendar deleted it without stopping its subscriptions, and one failed step failed the whole
+    request.** The provider kept calling for days. `disconnectCalendar` stops each channel first, best effort,
+    then deletes the connection with its watches, busy time and tokens; a dead grant does not block it. The
+    grant is not revoked at the provider, because Google's revoke would also cut off another host on the same
+    account ([calendar-sync.md](calendar-sync.md)).
 
 ## Kept deliberately
 
-36. **Busy time is mirrored into the database, not fetched per request.** Slot queries never wait on a
+37. **Busy time is mirrored into the database, not fetched per request.** Slot queries never wait on a
     provider
     and keep working through its outage. The cost is up to one sync of delay; the cron re-reads any connection
     older than 30 minutes.
-37. **A reschedule is a new booking that cancels the old one**, not an edit in place: each keeps its own row,
+38. **A reschedule is a new booking that cancels the old one**, not an edit in place: each keeps its own row,
     token and history. The chain id keeps one calendar event and one ICS UID.
-38. **Small decisions that look odd:** capacity is derived from bookings, with no counter to drift; reminders
+39. **Small decisions that look odd:** capacity is derived from bookings, with no counter to drift; reminders
     are absolute times polled by a cron, not provider-side schedules; the ICS attachment type is bare
     `text/calendar` because SendGrid refuses a `;` in an attachment type; the channel signature is 22
     base64url characters (132 bits) so it fits Graph's 128-character `clientState`; the host's calendar
@@ -129,6 +136,8 @@ and why, and what was designed here and has never run in production. 38 entries.
 | The Firestore store with a per-host lock document | The store contract on the Firestore emulator |
 | Daily limits, buffers that add up, group seats in one engine | The engine suite |
 | Derived manage tokens | The edges suite |
+| Webhook connections pinned to the checked addresses | The edges suite, and a request to a name DNS cannot resolve reaching a local HTTPS server through the pinned address |
+| Calendar disconnect | The edges suite, and the cascade checked on local Postgres |
 | The embed script and its message checks | Reading; no browser test ships |
 | Renewing Microsoft subscriptions by re-creating them | Reading against the Graph documentation; not run against a live tenant |
 | The `pg_cron` schedule for Vercel Hobby | Reading against the Supabase documentation |
