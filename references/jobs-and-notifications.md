@@ -147,7 +147,8 @@ async function context(deps: RunnerDeps, bookingId: string) {
   return { booking, eventType, host };
 }
 
-function ics(deps: RunnerDeps, b: Booking, title: string, host: { name: string; email: string }, cancel: boolean): string {
+/** The invitee's copy carries the private manage link; the host's copy never does. */
+function ics(deps: RunnerDeps, b: Booking, title: string, host: { name: string; email: string }, cancel: boolean, forInvitee = true): string {
   return buildIcs({
     uid: icsUid(b.chainId, new URL(deps.appUrl).hostname),
     sequence: b.sequence,
@@ -155,7 +156,7 @@ function ics(deps: RunnerDeps, b: Booking, title: string, host: { name: string; 
     start: b.start,
     end: b.end,
     summary: title,
-    description: cancel ? 'Cancelled' : `Reschedule or cancel: ${manageUrl(deps.appUrl, b.id)}`,
+    description: cancel ? 'Cancelled' : forInvitee ? `Reschedule or cancel: ${manageUrl(deps.appUrl, b.id)}` : `Booked by ${b.inviteeName}`,
     location: b.meetingUrl,
     url: b.meetingUrl,
     organizer: host,
@@ -185,10 +186,16 @@ const handlers: Handlers = {
   async 'email.host'(deps, p, job) {
     const c = await context(deps, p.bookingId);
     if (!c) return;
+    const cancelled = p.change === 'cancelled';
+    // The same guard as the invitee's: a "new booking" notice for a booking already cancelled would mislead.
+    if (!cancelled && c.booking.status !== 'confirmed') return;
+    // A host whose calendar the module writes to gets the event there; an ICS as well would add it twice.
+    const invite = (await deps.calendar.writes(c.booking.hostId)) ? [] : [{ filename: 'invite.ics', type: 'text/calendar', content: ics(deps, c.booking, c.eventType.title, c.host, cancelled, false) }];
     await deps.mailer.send({
       to: { email: c.host.email, name: c.host.name },
       replyTo: { email: c.booking.inviteeEmail, name: c.booking.inviteeName },
       ...renderHostEmail({ ...c, change: p.change, manageUrl: null }),
+      attachments: invite,
       idempotencyKey: job.dedupeKey,
     });
   },
@@ -414,7 +421,9 @@ zones when you rewrite them.
 ## ICS
 
 The invitee's calendar must replace its copy on a reschedule and remove it on a cancel. That needs the same
-`UID` across the chain, a rising `SEQUENCE`, and `METHOD:REQUEST` or `METHOD:CANCEL`.
+`UID` across the chain, a rising `SEQUENCE`, and `METHOD:REQUEST` or `METHOD:CANCEL`. The host's e-mail
+carries the same event without the manage link, unless the module writes the booking into a calendar the host
+connected: that calendar already has it, and an ICS as well would add it twice.
 
 ```ts
 // lib/scheduling/ics.ts: one iTIP event (RFC 5545 and 5546). The UID is stable per booking chain and SEQUENCE

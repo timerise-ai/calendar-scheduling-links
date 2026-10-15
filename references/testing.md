@@ -8,11 +8,14 @@ Supabase when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set.
 |---|---|---|
 | `test/time.test.ts` | 8 | Wall clock to instant in both DST directions, `24:00`, a 5:45 offset, date arithmetic, validation |
 | `test/slot-engine.test.ts` | 13 | Rules, notice, horizon, overrides, cross-type conflicts, buffers adding up, busy time, seats, daily limit, the spring-forward walk, the fall-back day, page-and-write agreement, the candidate cap |
-| `test/booking.test.ts` | 12 | Token hash only, answer filtering, off-grid refusal, one winner of two, input validation, jobs written with the booking and sent once, HTML escaping, retry with backoff, atomic reschedule on one chain, the old booking kept on refusal, cancel by token, stale reminders skipped, group seats |
+| `test/booking.test.ts` | 13 | Token hash only, answer filtering, off-grid refusal, one winner of two, input validation, jobs written with the booking and sent once, HTML escaping, the host's invite without the manage link and no notice for a booking cancelled first, retry with backoff, atomic reschedule on one chain, the old booking kept on refusal, cancel by token, stale reminders skipped, group seats |
 | `test/edges.test.ts` | 18 | ICS UID, SEQUENCE, CANCEL, escaping and folding; webhook signatures; the private-address guard in every spelling `new URL` produces, every resolved address checked, the connection pinned to them; derived tokens, fail-closed cron auth, signed values, channel token length, sealed secrets; Google and Graph normalization; Google event ids; calendar disconnect, for its own host only and with a dead grant |
-| `test/store-contract.test.ts` | 5 per store | Booking and refusals, four concurrent requests with one winner, group seats with a daily limit, reschedule into an overlap, job leases |
+| `test/store-contract*.test.ts` | 5 per store | Booking and refusals, four concurrent requests with one winner, group seats with a daily limit, reschedule into an overlap, job leases |
 
-51 unit tests, plus 5 contract tests for each store that runs.
+52 unit tests, plus 5 contract tests for each store that runs. The contract is `test/store-contract.ts`, run
+by one file per store: the in-memory file always, and the file for the host's store, Supabase or Firestore,
+never the other one ([testing-flows.md](testing-flows.md)). The suites are copied as written; tests of the
+host's own go in new files.
 
 ## Setup
 
@@ -276,11 +279,12 @@ export function recordingMailer(failTimes = 0) {
   return { mailer, sent };
 }
 
-export function recordingCalendar() {
+export function recordingCalendar(connected = true) {
   const calls: string[] = [];
   const calendar: CalendarWriter = {
-    async upsert(b) { calls.push(`upsert:${b.chainId}:${b.start.toISOString()}`); return { externalEventId: `ev-${b.chainId}`, meetingUrl: 'https://meet.example/abc' }; },
+    async upsert(b) { calls.push(`upsert:${b.chainId}:${b.start.toISOString()}`); return connected ? { externalEventId: `ev-${b.chainId}`, meetingUrl: 'https://meet.example/abc' } : null; },
     async remove(b) { calls.push(`remove:${b.chainId}`); },
+    async writes() { return connected; },
   };
   return { calendar, calls };
 }
@@ -510,12 +514,12 @@ The booking, edges and store contract suites are in [testing-flows.md](testing-f
 
 ```bash
 # Firestore emulator (needs Java). firebase.json: {"emulators":{"firestore":{"port":8098}}}
-firebase emulators:exec --only firestore --project demo-scheduling "npx vitest run test/store-contract.test.ts"
+firebase emulators:exec --only firestore --project demo-scheduling "npx vitest run test/store-contract"
 
 # Supabase, local stack with the migration applied
 supabase start
 SUPABASE_URL=http://127.0.0.1:54321 SUPABASE_SERVICE_ROLE_KEY=<service_role key from supabase status> \
-  npx vitest run test/store-contract.test.ts
+  npx vitest run test/store-contract
 ```
 
 Then check by hand that the anon key is refused: `curl <SUPABASE_URL>/rest/v1/bookings -H "apikey: <anon>"`

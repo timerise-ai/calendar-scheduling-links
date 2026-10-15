@@ -39,7 +39,8 @@ and the non-negotiables that do not bend.
    fixtures and booking suite. Run them.
 5. Copy `ics.ts`, `emails.ts`, `mailer.ts`, `webhooks.ts`, `runner.ts`; adapt the e-mail wording; run the
    edges suite.
-6. Copy the routes and `runtime.ts`; write `host.ts` for the host's auth.
+6. Copy the routes, `runtime.ts` and `host.ts`. On Supabase Auth `host.ts` is used unchanged; for other auth,
+   rewrite its body and keep its signature.
 7. Build the public page, the widget and the manage page with the host's components
    ([booking-page-ui.md](booking-page-ui.md)), then the dashboard.
 8. Calendar sync last ([calendar-sync.md](calendar-sync.md)): it needs OAuth clients and a public URL.

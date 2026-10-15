@@ -79,6 +79,7 @@ async function BookingPageContent({ params, searchParams }: Props) {
 'use client';
 // Structure and behaviour only: render the elements with the host app's own buttons, inputs and layout.
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { isValidTimeZone } from '@/lib/scheduling/time';
 import type { InviteeQuestion } from '@/lib/scheduling/types';
 
 interface SlotDto {
@@ -114,21 +115,30 @@ function post(message: Record<string, unknown>) {
 
 export function BookingWidget({ eventTypeId, questions, horizonDays, embedded = false, rescheduleToken }: Props) {
   const [timeZone, setTimeZone] = useState('UTC');
+  // What the visitor is typing. Only a valid zone reaches timeZone: Intl throws on "Europe/Wars" mid-word.
+  const [zoneDraft, setZoneDraft] = useState('UTC');
+  const [loadFailed, setLoadFailed] = useState(false);
   const [monthStart, setMonthStart] = useState(() => new Date());
   const [slots, setSlots] = useState<SlotDto[] | null>(null);
   const [day, setDay] = useState<string | null>(null);
   const [picked, setPicked] = useState<SlotDto | null>(null);
   const [state, setState] = useState<'idle' | 'sending' | 'done' | 'taken' | 'error'>('idle');
 
-  useEffect(() => setTimeZone(visitorZone()), []);
+  useEffect(() => {
+    const zone = visitorZone();
+    setTimeZone(zone);
+    setZoneDraft(zone);
+  }, []);
 
   const load = useCallback(async () => {
     setSlots(null);
     const from = new Date(Math.max(Date.now(), monthStart.getTime()));
     const to = new Date(Math.min(from.getTime() + 31 * DAY, Date.now() + horizonDays * DAY + DAY));
     const q = new URLSearchParams({ eventTypeId, from: from.toISOString(), to: to.toISOString() });
-    const res = await fetch(`/api/scheduling/slots?${q}`, { cache: 'no-store' });
-    setSlots(res.ok ? ((await res.json()) as { slots: SlotDto[] }).slots : []);
+    // A network failure rejects instead of answering; without the catch the list would say "Loading" forever.
+    const res = await fetch(`/api/scheduling/slots?${q}`, { cache: 'no-store' }).catch(() => null);
+    setLoadFailed(!res?.ok);
+    setSlots(res?.ok ? ((await res.json()) as { slots: SlotDto[] }).slots : []);
   }, [eventTypeId, horizonDays, monthStart]);
 
   useEffect(() => {
@@ -158,13 +168,16 @@ export function BookingWidget({ eventTypeId, questions, horizonDays, embedded = 
     if (!picked) return;
     setState('sending');
     const answers = Object.fromEntries(questions.map(q => [q.id, String(form.get(`q_${q.id}`) ?? '')]));
-    const res = rescheduleToken
-      ? await fetch(`/api/scheduling/manage/${encodeURIComponent(rescheduleToken)}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'reschedule', start: picked.start }) })
-      : await fetch('/api/scheduling/bookings', {
+    const res = await (rescheduleToken
+      ? fetch(`/api/scheduling/manage/${encodeURIComponent(rescheduleToken)}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'reschedule', start: picked.start }) })
+      : fetch('/api/scheduling/bookings', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ eventTypeId, start: picked.start, name: form.get('name'), email: form.get('email'), timeZone, answers }),
-        });
+        })
+    ).catch(() => null);
+    // No answer at all: say so, rather than leaving the button disabled in "sending".
+    if (!res) return setState('error');
     if (res.status === 409) {
       // Someone else took it between listing and booking: say so and refresh the list.
       setState('taken');
@@ -199,13 +212,26 @@ export function BookingWidget({ eventTypeId, questions, horizonDays, embedded = 
           Later
         </button>
         <label>
-          Time zone <input value={timeZone} onChange={e => setTimeZone(e.target.value)} aria-describedby="tz-hint" />
+          Time zone{' '}
+          <input
+            value={zoneDraft}
+            aria-invalid={!isValidTimeZone(zoneDraft)}
+            aria-describedby="tz-hint"
+            onChange={e => {
+              setZoneDraft(e.target.value);
+              if (!isValidTimeZone(e.target.value)) return;
+              setTimeZone(e.target.value);
+              setDay(null);
+              setPicked(null);
+            }}
+          />
         </label>
         <small id="tz-hint">Times are shown in this zone.</small>
       </nav>
 
       {slots === null ? <p>Loading times</p> : null}
-      {slots && slots.length === 0 ? <p>No open times in this period.</p> : null}
+      {loadFailed ? <p role="alert">Could not load times. Check the connection and try again.</p> : null}
+      {slots && slots.length === 0 && !loadFailed ? <p>No open times in this period.</p> : null}
       {state === 'taken' ? <p role="alert">That time was just taken. Pick another.</p> : null}
 
       <ul aria-label="Days">
@@ -343,8 +369,8 @@ export function CancelForm({ token }: { token: string }) {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'cancel', reason: String(form.get('reason') ?? '') || undefined }),
-    });
-    setState(res.ok ? 'done' : 'error');
+    }).catch(() => null);
+    setState(res?.ok ? 'done' : 'error');
   }
   if (state === 'done') return <p aria-live="polite">Cancelled. The host has been told.</p>;
   return (

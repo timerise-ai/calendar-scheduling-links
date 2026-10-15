@@ -15,7 +15,7 @@ description: >
   reschedule link, cancel link, embed widget, booking webhook, double booking, DST, exclusion constraint,
   btree_gist, pg_cron. Carries one pure slot engine that the page and the write both call, a per-host lock
   with a Postgres exclusion constraint, side effects as leased idempotent jobs, sealed OAuth tokens, signed
-  state and channel tokens, and 51 unit tests plus a store contract run on Supabase and the Firestore
+  state and channel tokens, and 52 unit tests plus a store contract run on Supabase and the Firestore
   emulator. Next.js App Router on Vercel; Supabase by default, Firestore behind the same SchedulingStore
   seam. Not payments, not team round robin in this release, not a video meeting service.
 ---
@@ -119,20 +119,21 @@ work. The rename table is in [data-model.md](references/data-model.md).
    [supabase-stores.md](references/supabase-stores.md), or [firestore.md](references/firestore.md).
 4. Copy the service, tokens and validation, run the booking suite:
    [booking-flow.md](references/booking-flow.md).
-5. Copy jobs, e-mail and ICS, then webhooks:
-   [jobs-and-notifications.md](references/jobs-and-notifications.md),
+5. Copy jobs, e-mail, ICS and webhooks: [jobs-and-notifications.md](references/jobs-and-notifications.md),
    [webhooks.md](references/webhooks.md).
-6. Copy the routes and runtime, write `host.ts`: [api-routes.md](references/api-routes.md).
+6. Copy the routes, `runtime.ts` and `host.ts`; on Supabase Auth `host.ts` is used unchanged:
+   [api-routes.md](references/api-routes.md).
 7. Build the pages and dashboard with the host's components:
    [booking-page-ui.md](references/booking-page-ui.md).
 8. Add calendar sync: [calendar-sync.md](references/calendar-sync.md),
    [calendar-providers.md](references/calendar-providers.md).
-9. Set the environment, the cron and deploy: [operations.md](references/operations.md).
+9. Set the environment by the exact names in [operations.md](references/operations.md), and an `.env.example`
+   with all of them, empty; then the cron, and deploy.
 10. Extend only along [extensions.md](references/extensions.md). Before changing a template, read
     [provenance.md](references/provenance.md).
 
-Copy the templates as written. Where a reference says a line is odd on purpose, it is. In your final message,
-list the environment variables and the provider setup the operator still has to do.
+Copy the templates and the suites as written, the lines a reference calls odd on purpose too; your own tests
+go in new files. The final message itself names every variable and the provider setup still to do.
 
 ## Reference directory
 

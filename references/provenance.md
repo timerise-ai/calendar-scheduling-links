@@ -141,6 +141,22 @@ and why, and what was designed here and has never run in production. 39 entries.
 | The embed script and its message checks | Reading; no browser test ships |
 | Renewing Microsoft subscriptions by re-creating them | Reading against the Graph documentation; not run against a live tenant |
 | The `pg_cron` schedule for Vercel Hobby | Reading against the Supabase documentation |
+| The host's ICS invite, without the manage link, left out when the module writes the host's calendar (from the 0.1.0 agent evals) | The booking suite |
+| The store contract as one file per store, so a Supabase app compiles the suite without the Firestore seed (from the 0.1.0 agent evals) | `tsc` and the suite in a scratch project holding only the Supabase file, and in one holding all three |
+
+### Found by the agent evals
+
+Defects in this skill's own 0.1.0 templates, found when an agent patched them during an eval run, reproduced
+against the template, and fixed in 0.1.1. Apps built from 0.1.0 should copy the fixed files.
+
+- **The host's "new booking" e-mail went out for a booking cancelled before its job ran**, after the
+  cancellation notice. The invitee handler had the guard; the host handler now has it too, and the booking
+  suite fails on the 0.1.0 runner.
+- **The widget's time zone field crashed the widget on a partial name.** `Intl.DateTimeFormat` throws
+  `RangeError` for `Europe/Wars` (checked in Node), and every keystroke between two valid zones is one. The
+  field now edits a draft and applies only a zone `isValidTimeZone` accepts.
+- **A network failure left the widget on "Loading times" or a disabled button, and the cancel form in
+  "sending".** A rejected `fetch` now ends in the error state. Checked by reading; no browser test ships.
 
 ## If you are rebuilding the earlier implementation
 

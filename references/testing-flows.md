@@ -103,6 +103,30 @@ describe('booking', () => {
     expect(invitee?.text).toContain('https://book.example.com/booking/');
   });
 
+  it('sends the host an invite without the manage link, and no notice for a booking cancelled before it ran', async () => {
+    const { deps, runner, mail } = setup();
+    const a = await createBooking(deps, input('2026-10-14T08:00:00Z'));
+    await runDueJobs(runner, 1000);
+    // The module writes this host's calendar, so the event is there and an ICS would add it a second time.
+    expect(mail.sent.find(s => s.to.email === 'ana@example.com')?.attachments).toEqual([]);
+    const bare = recordingMailer();
+    const offline = { ...runner, mailer: bare.mailer, calendar: recordingCalendar(false).calendar };
+    await cancelBooking(deps, a.manageToken, null);
+    await createBooking(deps, input('2026-10-15T08:00:00Z', { email: 'b@example.com' }));
+    await runDueJobs(offline, 1000);
+    const host = bare.sent.filter(s => s.to.email === 'ana@example.com');
+    expect(host).toHaveLength(2);
+    // Unfold the ICS lines first, so a link split across a fold is still found.
+    const ics = host.map(s => s.attachments?.[0]?.content.replace(/\r\n /g, '') ?? '');
+    expect(ics.every(c => c.includes('BEGIN:VCALENDAR') && !c.includes('/booking/'))).toBe(true);
+    // a was cancelled after its jobs ran; b is cancelled before they do, so the host hears only of the cancel.
+    const late = setup();
+    const b = await createBooking(late.deps, input('2026-10-14T08:00:00Z'));
+    await cancelBooking(late.deps, b.manageToken, null);
+    await runDueJobs(late.runner, 1000);
+    expect(late.mail.sent.filter(s => s.to.email === 'ana@example.com').map(s => s.text.includes(', cancelled'))).toEqual([true]);
+  });
+
   it('retries a failed e-mail with backoff, and does not resend what already went out', async () => {
     const { deps, runner, m } = setup();
     const flaky = recordingMailer(1);
@@ -412,85 +436,28 @@ describe('provider normalization', () => {
 
 ## Store contract
 
+One contract in `test/store-contract.ts`, and one small test file per store that hands it a backend. Copy
+the contract, the in-memory file, and the file for the host's store: `store-contract.supabase.test.ts` on
+Supabase, `store-contract.firestore.test.ts` on Firestore. The other store's file is the only part of the
+suites a host leaves out; nothing inside a file is cut. `npx vitest run test/store-contract` runs every
+store whose file is present and whose environment is set.
+
 ```ts
-// test/store-contract.test.ts: one contract, every store. The in-memory store always runs; Firestore runs
-// when FIRESTORE_EMULATOR_HOST is set, Supabase when SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.
-import { randomUUID } from 'node:crypto';
+// test/store-contract.ts: one contract, every store. Not a test file itself: each store's test file below
+// passes its backend in, so a Supabase app never compiles the Firestore seed and a Firestore app never the
+// Supabase one.
 import { describe, expect, it } from 'vitest';
 import { cancelBooking, createBooking, rescheduleBooking, SchedulingError } from '@/lib/scheduling/booking-service';
 import type { SchedulingStore } from '@/lib/scheduling/store';
 import type { EventType } from '@/lib/scheduling/types';
-import { clock, eventType, host, memoryStore, schedule } from './fixtures';
+import { clock, eventType } from './fixtures';
 
-interface Backend {
+export interface Backend {
   name: string;
   enabled: boolean;
   /** Seeds a fresh host with the fixture schedule and the given event types; returns a store and the ids. */
   seed: (ets: EventType[]) => Promise<{ store: SchedulingStore; ids: Record<string, string> }>;
 }
-
-const backends: Backend[] = [
-  {
-    name: 'memory',
-    enabled: true,
-    seed: async ets => ({ store: memoryStore(ets).store, ids: Object.fromEntries(ets.map(e => [e.slug, e.id])) }),
-  },
-  {
-    name: 'firestore',
-    enabled: Boolean(process.env.FIRESTORE_EMULATOR_HOST),
-    seed: async ets => {
-      const { initializeApp, getApps } = await import('firebase-admin/app');
-      const { getFirestore } = await import('firebase-admin/firestore');
-      const { firestoreStore } = await import('@/lib/scheduling/firestore-store');
-      if (getApps().length === 0) initializeApp({ projectId: 'demo-scheduling' });
-      const db = getFirestore();
-      const hostId = `h-${randomUUID()}`;
-      await db.collection('schedulingHosts').doc(hostId).set({ handle: hostId, name: host.name, email: host.email, timeZone: host.timeZone });
-      const scheduleId = `s-${randomUUID()}`;
-      await db.collection('schedules').doc(scheduleId).set({ ...schedule, id: scheduleId, hostId });
-      const ids: Record<string, string> = {};
-      for (const e of ets) {
-        const id = `et-${randomUUID()}`;
-        ids[e.slug] = id;
-        await db.collection('eventTypes').doc(id).set({ ...e, id, hostId, scheduleId });
-      }
-      return { store: firestoreStore(db), ids };
-    },
-  },
-  {
-    name: 'supabase',
-    enabled: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
-    seed: async ets => {
-      const { supabaseAdmin, supabaseStore } = await import('@/lib/scheduling/supabase-store');
-      const db = supabaseAdmin();
-      const hostId = `h-${randomUUID()}`;
-      const ok = <T>(r: { data: T; error: { message: string } | null }) => {
-        if (r.error) throw new Error(r.error.message);
-        return r.data;
-      };
-      ok(await db.from('scheduling_hosts').insert({ id: hostId, handle: `t${randomUUID().slice(0, 8)}`, name: host.name, email: host.email, time_zone: host.timeZone }));
-      const s = ok(await db.from('schedules').insert({ host_id: hostId, name: schedule.name, time_zone: schedule.timeZone, rules: schedule.rules, overrides: schedule.overrides }).select('id').single()) as { id: string };
-      const ids: Record<string, string> = {};
-      for (const e of ets) {
-        const r = ok(
-          await db
-            .from('event_types')
-            .insert({
-              host_id: hostId, schedule_id: s.id, slug: e.slug, title: e.title, kind: e.kind, capacity: e.capacity,
-              duration_minutes: e.durationMinutes, slot_interval_minutes: e.slotIntervalMinutes,
-              buffer_before_minutes: e.bufferBeforeMinutes, buffer_after_minutes: e.bufferAfterMinutes,
-              min_notice_minutes: e.minNoticeMinutes, horizon_days: e.horizonDays, daily_limit: e.dailyLimit,
-              location_kind: e.locationKind, questions: e.questions,
-            })
-            .select('id')
-            .single(),
-        ) as { id: string };
-        ids[e.slug] = r.id;
-      }
-      return { store: supabaseStore(db), ids };
-    },
-  },
-];
 
 const person = (eventTypeId: string, start: string, email = 'iza@example.com') => ({ eventTypeId, start, name: 'Iza', email, timeZone: 'Europe/Warsaw', answers: {} });
 
@@ -503,7 +470,7 @@ async function code(p: Promise<unknown>): Promise<string> {
   }
 }
 
-for (const backend of backends) {
+export function storeContract(backend: Backend): void {
   describe.skipIf(!backend.enabled)(`store contract: ${backend.name}`, () => {
     const ets = [eventType({ id: 'et-a', slug: 'a' }), eventType({ id: 'et-b', slug: 'b', kind: 'group', capacity: 2, durationMinutes: 60, slotIntervalMinutes: 60, dailyLimit: 1 })];
 
@@ -558,4 +525,88 @@ for (const backend of backends) {
     });
   });
 }
+```
+
+```ts
+// test/store-contract.test.ts: the contract against the in-memory store. Always runs, on every stack.
+import { memoryStore } from './fixtures';
+import { storeContract } from './store-contract';
+
+storeContract({
+  name: 'memory',
+  enabled: true,
+  seed: async ets => ({ store: memoryStore(ets).store, ids: Object.fromEntries(ets.map(e => [e.slug, e.id])) }),
+});
+```
+
+```ts
+// test/store-contract.supabase.test.ts: Supabase apps only. Runs when SUPABASE_URL and
+// SUPABASE_SERVICE_ROLE_KEY are set, against a database with the migration applied; it seeds test rows.
+import { randomUUID } from 'node:crypto';
+import { host, schedule } from './fixtures';
+import { storeContract } from './store-contract';
+
+storeContract({
+  name: 'supabase',
+  enabled: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
+  seed: async ets => {
+    const { supabaseAdmin, supabaseStore } = await import('@/lib/scheduling/supabase-store');
+    const db = supabaseAdmin();
+    const hostId = `h-${randomUUID()}`;
+    const ok = <T>(r: { data: T; error: { message: string } | null }) => {
+      if (r.error) throw new Error(r.error.message);
+      return r.data;
+    };
+    ok(await db.from('scheduling_hosts').insert({ id: hostId, handle: `t${randomUUID().slice(0, 8)}`, name: host.name, email: host.email, time_zone: host.timeZone }));
+    const s = ok(await db.from('schedules').insert({ host_id: hostId, name: schedule.name, time_zone: schedule.timeZone, rules: schedule.rules, overrides: schedule.overrides }).select('id').single()) as { id: string };
+    const ids: Record<string, string> = {};
+    for (const e of ets) {
+      const r = ok(
+        await db
+          .from('event_types')
+          .insert({
+            host_id: hostId, schedule_id: s.id, slug: e.slug, title: e.title, kind: e.kind, capacity: e.capacity,
+            duration_minutes: e.durationMinutes, slot_interval_minutes: e.slotIntervalMinutes,
+            buffer_before_minutes: e.bufferBeforeMinutes, buffer_after_minutes: e.bufferAfterMinutes,
+            min_notice_minutes: e.minNoticeMinutes, horizon_days: e.horizonDays, daily_limit: e.dailyLimit,
+            location_kind: e.locationKind, questions: e.questions,
+          })
+          .select('id')
+          .single(),
+      ) as { id: string };
+      ids[e.slug] = r.id;
+    }
+    return { store: supabaseStore(db), ids };
+  },
+});
+```
+
+```ts
+// test/store-contract.firestore.test.ts: Firestore apps only. Runs when FIRESTORE_EMULATOR_HOST is set.
+import { randomUUID } from 'node:crypto';
+import { host, schedule } from './fixtures';
+import { storeContract } from './store-contract';
+
+storeContract({
+  name: 'firestore',
+  enabled: Boolean(process.env.FIRESTORE_EMULATOR_HOST),
+  seed: async ets => {
+    const { initializeApp, getApps } = await import('firebase-admin/app');
+    const { getFirestore } = await import('firebase-admin/firestore');
+    const { firestoreStore } = await import('@/lib/scheduling/firestore-store');
+    if (getApps().length === 0) initializeApp({ projectId: 'demo-scheduling' });
+    const db = getFirestore();
+    const hostId = `h-${randomUUID()}`;
+    await db.collection('schedulingHosts').doc(hostId).set({ handle: hostId, name: host.name, email: host.email, timeZone: host.timeZone });
+    const scheduleId = `s-${randomUUID()}`;
+    await db.collection('schedules').doc(scheduleId).set({ ...schedule, id: scheduleId, hostId });
+    const ids: Record<string, string> = {};
+    for (const e of ets) {
+      const id = `et-${randomUUID()}`;
+      ids[e.slug] = id;
+      await db.collection('eventTypes').doc(id).set({ ...e, id, hostId, scheduleId });
+    }
+    return { store: firestoreStore(db), ids };
+  },
+});
 ```

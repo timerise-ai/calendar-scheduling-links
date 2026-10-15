@@ -9,7 +9,7 @@ Environment, schedules, provider setup and the first deploy, on Vercel with Supa
 | `APP_URL` | yes | Public origin, `https://book.example.com`. Links in e-mails, OAuth redirects, push addresses. |
 | `SUPABASE_URL` | yes | Project URL. |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | Server only. |
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | for `host.ts` | Reads the host's session. |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes, on Supabase Auth | Read by `host.ts` for the host's session; without them no host can sign in. |
 | `SCHEDULING_TOKEN_SECRET` | yes | At least 32 characters. Derives manage tokens and signs OAuth state and channel tokens. Rotating it invalidates every manage link already sent. |
 | `SCHEDULING_ENCRYPTION_KEY` | yes | 32 bytes, base64. Seals OAuth tokens and webhook secrets. `openssl rand -base64 32`. |
 | `CRON_SECRET` | yes | At least 16 characters. The cron route refuses every request without it. |
@@ -19,6 +19,11 @@ Environment, schedules, provider setup and the first deploy, on Vercel with Supa
 | `MICROSOFT_TENANT` | no | Default `common`: work, school and personal accounts. |
 
 Set them with `vercel env add`. Supabase from the Vercel Marketplace sets the Supabase variables itself.
+
+These names are the module's; the templates read them, so they are never renamed. A tracked `.env.example`
+lists every variable in the table, each with an empty value, and a `.env*` ignore rule gets a
+`!.env.example` exception. Real values go only into the deployment's environment or an ignored `.env.local`.
+The handover names every variable in this table in the final message itself, with what it is for.
 
 ## Schedules
 

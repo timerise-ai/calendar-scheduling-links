@@ -57,8 +57,8 @@ on) are other skills, not dependencies. They are referenced by name from `SKILL.
   ```bash
   npx tsc --noEmit -p . && npx vitest run && npx next build
   npx vitest run test/slot-engine.test.ts
-  firebase emulators:exec --only firestore --project demo-scheduling "npx vitest run test/store-contract.test.ts"
-  SUPABASE_URL=http://127.0.0.1:54321 SUPABASE_SERVICE_ROLE_KEY=<from supabase status> npx vitest run test/store-contract.test.ts
+  firebase emulators:exec --only firestore --project demo-scheduling "npx vitest run test/store-contract"
+  SUPABASE_URL=http://127.0.0.1:54321 SUPABASE_SERVICE_ROLE_KEY=<from supabase status> npx vitest run test/store-contract
   ```
 
   The second line runs one suite. The store contract always runs against the in-memory store. It runs against
@@ -67,7 +67,7 @@ on) are other skills, not dependencies. They are referenced by name from `SKILL.
   SQL is checked by applying it to that local stack; the anon key must then be refused with `42501`
   (`references/testing.md`). `public/scheduling-embed.js` is checked by reading. Do not add a `package.json`
   to this repository.
-- **Test counts are claims.** `testing.md` and `testing-flows.md` state 8 + 13 + 12 + 18 = 51 unit tests and
+- **Test counts are claims.** `testing.md` and `testing-flows.md` state 8 + 13 + 13 + 18 = 52 unit tests and
   5 contract tests per store; `README.md`, `SKILL.md` and `CHANGELOG.md` repeat them. Change a suite, change
   the numbers.
 - **Keep the three indexes in sync** with `references/`: the quick start and the reference directory in

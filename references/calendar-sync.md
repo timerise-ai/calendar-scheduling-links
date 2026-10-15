@@ -181,6 +181,8 @@ export interface CalendarWriter {
   /** Creates or patches the host's event for the booking's chain. Returns what to store, or null if no calendar. */
   upsert(booking: Booking, eventType: EventType, host: HostProfile): Promise<{ externalEventId: string; meetingUrl: string | null } | null>;
   remove(booking: Booking): Promise<void>;
+  /** True when the host has a calendar this module writes bookings into; the host e-mail then skips its ICS. */
+  writes(hostId: string): Promise<boolean>;
 }
 
 export const noCalendar: CalendarWriter = {
@@ -188,6 +190,9 @@ export const noCalendar: CalendarWriter = {
     return null;
   },
   async remove() {},
+  async writes() {
+    return false;
+  },
 };
 ```
 
@@ -436,6 +441,9 @@ export function calendarWriter(deps: SyncDeps): CalendarWriter {
       if (!c?.writeCalendarId) return;
       const token = await accessToken(deps, c);
       await PROVIDERS[c.provider].deleteEvent(token, c.writeCalendarId, { chainId: booking.chainId, externalEventId: booking.externalEventId });
+    },
+    async writes(hostId: string) {
+      return Boolean((await target(hostId))?.writeCalendarId);
     },
   };
 }

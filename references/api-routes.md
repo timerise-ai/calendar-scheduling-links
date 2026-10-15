@@ -23,7 +23,9 @@ The host's dashboard (event types, schedules, calendars, bookings list) is the h
 
 ## Seams
 
-The auth seam. Replace the body for Clerk, Auth.js or a custom session; keep the signature.
+The auth seam. On Supabase Auth it is copied unchanged: it reads `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, and needs no other helper or variable. Replace the body for Clerk, Auth.js or
+a custom session; keep the signature.
 
 ```ts
 // lib/scheduling/host.ts: the auth seam. Return the signed-in user's id, or null. The id is the host id.
