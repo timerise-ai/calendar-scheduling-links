@@ -62,7 +62,7 @@ mkdir -p ~/.agents/skills
 ln -s ~/.claude/skills/calendar-scheduling-links ~/.agents/skills/calendar-scheduling-links
 ```
 
-Update with `git pull` in the clone. The current release is **0.1.0**. See [CHANGELOG.md](CHANGELOG.md).
+Update with `git pull` in the clone. The current release is **0.1.1**. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Activation
 

@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-10-15
+
+Fix release, from scoring the prompt-1 agent eval runs against 0.1.0. Apps built from 0.1.0 should copy
+`runner.ts`, `calendar/writer.ts`, `calendar/sync.ts`, `booking-widget.tsx` and `cancel-form.tsx`.
+
+### Fixed
+
+- The host's "new booking" e-mail went out for a booking cancelled before its job ran. The host handler now
+  has the invitee handler's guard; a booking-suite test fails on the 0.1.0 runner
+  (`jobs-and-notifications.md`).
+- The widget's time zone field threw `RangeError` from `Intl.DateTimeFormat` on a partial zone name and
+  took the widget down. It now edits a draft and applies only a valid zone (`booking-page-ui.md`).
+- A rejected `fetch` left the widget on "Loading times" or a disabled button, and the cancel form in
+  "sending". Both now end in the error state.
+- The store contract could not compile in a Supabase app without `firebase-admin` and the Firestore store.
+  It is now `test/store-contract.ts`, run by one test file per store (`testing-flows.md`).
+
+### Added
+
+- The host's e-mail carries the ICS invite, without the manage link, unless the module writes the booking
+  into a calendar the host connected. `CalendarWriter` gains `writes(hostId)`; a host's own implementation
+  adds it. 52 unit tests (booking suite 13).
+
+### Changed
+
+- `host.ts` is used unchanged on Supabase Auth; the quick start, `adaptation.md` and `api-routes.md` say so.
+- The environment names in `operations.md` are canonical, the `NEXT_PUBLIC_SUPABASE_*` pair is marked
+  required on Supabase Auth, an `.env.example` lists every variable with an empty value, and the final
+  message itself names every variable and the provider setup (`SKILL.md`, `operations.md`).
+
 ## [0.1.0] - 2026-10-15
 
 First release: self-hosted scheduling links for Next.js App Router on Vercel, with Supabase or Firestore.
