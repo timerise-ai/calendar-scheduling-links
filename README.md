@@ -108,8 +108,8 @@ screen is the host app's too.
    requests for one slot to each store and expects one winner.
 3. **Side effects are jobs, written with the change and run after it.** No e-mail, calendar call or webhook
    inside the transaction; every job idempotent and re-checking the booking. The booking suite runs the
-   queue twice and expects one send, retries a failing mailer, and plants a stale reminder that must stay
-   silent.
+   queue twice and expects one send, retries a failing mailer, and plants a stale reminder that must not be
+   sent.
 4. **Instants in storage, zones only at the edges.** Store UTC instants; convert with an explicit IANA zone,
    iterate local dates, never add 24 hours. The time and engine suites cover both DST changes, a 5:45 offset
    and a late-evening walk across a spring-forward night.

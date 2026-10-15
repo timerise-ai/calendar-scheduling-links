@@ -51,21 +51,25 @@ on) are other skills, not dependencies. They are referenced by name from `SKILL.
   A block that continues a file already introduced omits it.
 - **The code blocks are compiled and run.** Write each block to its path in a scratch project (never this
   repo) with `next`, `react`, `zod`, `@supabase/supabase-js`, `@supabase/ssr`, `firebase-admin`,
-  `@vercel/config` and `vitest`, a `tsconfig.json` that is `strict`, sets `noUncheckedIndexedAccess` and maps `"@/*": ["./*"]`,
-  and run:
+  `@vercel/config` and `vitest`, a `tsconfig.json` that is `strict`, sets `noUncheckedIndexedAccess` and
+  maps `"@/*": ["./*"]`, and run:
 
   ```bash
   npx tsc --noEmit -p . && npx vitest run && npx next build
-  firebase emulators:exec --only firestore --project demo-scheduling "npx vitest run
-  test/store-contract.test.ts"
-  SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... npx vitest run test/store-contract.test.ts
+  npx vitest run test/slot-engine.test.ts
+  firebase emulators:exec --only firestore --project demo-scheduling "npx vitest run test/store-contract.test.ts"
+  SUPABASE_URL=http://127.0.0.1:54321 SUPABASE_SERVICE_ROLE_KEY=<from supabase status> npx vitest run test/store-contract.test.ts
   ```
 
-  The SQL is checked by applying it to a local Supabase stack. `public/scheduling-embed.js` is checked by
-  reading. Do not add a `package.json` to this repository.
-- **Test counts are claims.** `testing.md` and `testing-flows.md` state 8 + 13 + 12 + 14 = 47 unit tests and 5
-  contract tests per
-  store; `README.md`, `SKILL.md` and `CHANGELOG.md` repeat them. Change a suite, change the numbers.
+  The second line runs one suite. The store contract always runs against the in-memory store. It runs against
+  Firestore when `FIRESTORE_EMULATOR_HOST` is set (the emulator needs Java and a `firebase.json` with port
+  8098), and against Supabase when both env vars are set (`supabase start` with the migration applied). The
+  SQL is checked by applying it to that local stack; the anon key must then be refused with `42501`
+  (`references/testing.md`). `public/scheduling-embed.js` is checked by reading. Do not add a `package.json`
+  to this repository.
+- **Test counts are claims.** `testing.md` and `testing-flows.md` state 8 + 13 + 12 + 14 = 47 unit tests and
+  5 contract tests per store; `README.md`, `SKILL.md` and `CHANGELOG.md` repeat them. Change a suite, change
+  the numbers.
 - **Keep the three indexes in sync** with `references/`: the quick start and the reference directory in
   `SKILL.md`, and the file table in `README.md`.
 - **Identifiers are shared across files.** `computeSlots`, `zonedToInstant`, `localDateOf`, `addDays`,
@@ -87,6 +91,12 @@ on) are other skills, not dependencies. They are referenced by name from `SKILL.
 - **A template that needs something new from the host adds a row** to the seam contract in `adaptation.md`
   and `SKILL.md`.
 - **Do not remove the odd-looking parts.** Each is a ledger entry in `provenance.md`.
+- **Mark additions as additions.** Anything designed in the skill and never run in the earlier implementation
+  belongs in the "Designed here, not yet run in production" section of `provenance.md`, stated as such, or in
+  `extensions.md` as a design. The skill's credibility is that it distinguishes the two.
+- **Evals are not skill content.** A new prompt or an eval result is committed as `chore(evals): ...`, never
+  causes a version bump and never rides in a release commit. After each eval, the README's eval badges point
+  at the newest prompt 1 result per agent, updated in the commit that adds the run's notes.
 - **Origin wording.** Call the codebase the audit ran against "the earlier implementation", and follow
   section 2 of the standard: none of its banned words, no denials, no corpus figures, and no defect counts or
   failure stories on the front door (README intro, `SKILL.md`, the description, this file).
