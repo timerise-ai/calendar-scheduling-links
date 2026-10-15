@@ -27,7 +27,7 @@ against the earlier implementation of that core. The templates hold the properti
 to hold: a start is booked only if the engine offers it at write time; of any number of simultaneous
 requests for one slot, one wins; local days survive both DST changes; a reschedule moves the same calendar
 event and the same invitation; a reminder belongs to the start it was made for; calendar access, manage
-links and webhooks cannot be forged. 52 unit tests and a store contract, run on local Supabase and the
+links and webhooks cannot be forged. 53 unit tests and a store contract, run on local Supabase and the
 Firestore emulator, state each one, and [`references/provenance.md`](references/provenance.md) has the
 record.
 

@@ -157,6 +157,14 @@ against the template, and fixed in 0.1.1. Apps built from 0.1.0 should copy the 
   field now edits a draft and applies only a zone `isValidTimeZone` accepts.
 - **A network failure left the widget on "Loading times" or a disabled button, and the cancel form in
   "sending".** A rejected `fetch` now ends in the error state. Checked by reading; no browser test ships.
+- **The reschedule widget listed times from the public list, which counts the booking being moved** (found
+  in the 0.1.1 evals, fixed in 0.1.2). A 60-minute booking at 08:00 could be moved to 08:30 by
+  `rescheduleBooking`, but the page offered only 07:00 and 09:00 around it. `listRescheduleSlots` and
+  `/api/scheduling/manage/[token]/slots` list without it; the booking suite checks both lists against the
+  write.
+
+Defects in 0.1.1 found the same way are marked with their release; apps built from 0.1.0 or 0.1.1 should copy
+`booking-service.ts`, the manage slots route and `booking-widget.tsx`.
 
 ## If you are rebuilding the earlier implementation
 

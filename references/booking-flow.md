@@ -184,11 +184,26 @@ async function slotsIn(deps: ServiceDeps, b: Bookable, from: Date, to: Date, ign
   });
 }
 
-export async function listSlots(deps: ServiceDeps, eventTypeId: string, from: Date, to: Date): Promise<Slot[]> {
+function checkWindow(from: Date, to: Date): void {
   if (!(from < to) || to.getTime() - from.getTime() > MAX_WINDOW_DAYS * DAY) {
     throw new SchedulingError('invalid_input', 'window');
   }
+}
+
+export async function listSlots(deps: ServiceDeps, eventTypeId: string, from: Date, to: Date): Promise<Slot[]> {
+  checkWindow(from, to);
   return slotsIn(deps, await loadBookable(deps, eventTypeId), from, to);
+}
+
+/**
+ * The times a reschedule can move to: the same engine as rescheduleBooking, without the booking being moved.
+ * The public listing counts that booking, so it would hide every time that overlaps it.
+ */
+export async function listRescheduleSlots(deps: ServiceDeps, token: string, from: Date, to: Date): Promise<Slot[]> {
+  checkWindow(from, to);
+  const old = await bookingForToken(deps, token);
+  if (old.status !== 'confirmed') throw new SchedulingError('not_confirmed');
+  return slotsIn(deps, await loadBookable(deps, old.eventTypeId), from, to, old.id);
 }
 
 export const bookingInput = z.object({

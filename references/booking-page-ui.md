@@ -74,6 +74,10 @@ async function BookingPageContent({ params, searchParams }: Props) {
 
 ## Widget
 
+In reschedule mode the widget lists through the manage token, without the booking being moved, and after the
+move it shows "Rescheduled" and stays on the page. It does not redirect: the new manage link goes out in the
+reschedule e-mail, and the old link's page already says to use the newest one.
+
 ```tsx
 // components/scheduling/booking-widget.tsx: pick a day, pick a time, fill the form, confirm.
 'use client';
@@ -135,11 +139,13 @@ export function BookingWidget({ eventTypeId, questions, horizonDays, embedded = 
     const from = new Date(Math.max(Date.now(), monthStart.getTime()));
     const to = new Date(Math.min(from.getTime() + 31 * DAY, Date.now() + horizonDays * DAY + DAY));
     const q = new URLSearchParams({ eventTypeId, from: from.toISOString(), to: to.toISOString() });
+    // A reschedule lists without the booking it moves, or every time that overlaps it would be missing.
+    const url = rescheduleToken ? `/api/scheduling/manage/${encodeURIComponent(rescheduleToken)}/slots?${q}` : `/api/scheduling/slots?${q}`;
     // A network failure rejects instead of answering; without the catch the list would say "Loading" forever.
-    const res = await fetch(`/api/scheduling/slots?${q}`, { cache: 'no-store' }).catch(() => null);
+    const res = await fetch(url, { cache: 'no-store' }).catch(() => null);
     setLoadFailed(!res?.ok);
     setSlots(res?.ok ? ((await res.json()) as { slots: SlotDto[] }).slots : []);
-  }, [eventTypeId, horizonDays, monthStart]);
+  }, [eventTypeId, horizonDays, monthStart, rescheduleToken]);
 
   useEffect(() => {
     void load();

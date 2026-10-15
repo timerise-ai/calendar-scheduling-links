@@ -11,6 +11,7 @@ Every route is a thin shell: parse, call one service function, map errors. The s
 | `/api/scheduling/bookings` | POST | Public | `createBooking`, then drains jobs in `after()` |
 | `/api/scheduling/manage/[token]` | GET, POST | Token holder | Reads the booking; `cancel` or `reschedule` |
 | `/api/scheduling/manage/[token]/ics` | GET | Token holder | The ICS download |
+| `/api/scheduling/manage/[token]/slots?from&to` | GET | Token holder | Times to reschedule to, without the booking itself, `no-store` |
 | `/api/scheduling/cron` | GET | `CRON_SECRET` | Jobs, watch renewal, calendar sync |
 | `/api/scheduling/calendar/[provider]/connect` | GET | Signed-in host | Redirects to consent |
 | `/api/scheduling/calendar/[provider]/callback` | GET | Signed-in host | Stores the connection, first sync, watches |
@@ -218,6 +219,31 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       { slots: slots.map(s => ({ start: s.start.toISOString(), end: s.end.toISOString(), seatsLeft: s.seatsLeft })) },
       // Availability changes with every booking: never cache it at the edge.
+      { headers: { 'cache-control': 'no-store' } },
+    );
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+```
+
+```ts
+// app/api/scheduling/manage/[token]/slots/route.ts: GET ?from=&to=. The reschedule widget's list: the public
+// one counts the booking being moved and would hide every time that overlaps it.
+import { NextResponse, type NextRequest } from 'next/server';
+import { listRescheduleSlots } from '@/lib/scheduling/booking-service';
+import { errorResponse } from '@/lib/scheduling/http';
+import { serviceDeps } from '@/lib/scheduling/runtime';
+
+export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+  const q = req.nextUrl.searchParams;
+  const from = new Date(q.get('from') ?? '');
+  const to = new Date(q.get('to') ?? '');
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return NextResponse.json({ error: 'invalid_input' }, { status: 400 });
+  try {
+    const slots = await listRescheduleSlots(serviceDeps(), (await params).token, from, to);
+    return NextResponse.json(
+      { slots: slots.map(s => ({ start: s.start.toISOString(), end: s.end.toISOString(), seatsLeft: s.seatsLeft })) },
       { headers: { 'cache-control': 'no-store' } },
     );
   } catch (err) {

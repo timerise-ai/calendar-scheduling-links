@@ -8,11 +8,11 @@ Supabase when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set.
 |---|---|---|
 | `test/time.test.ts` | 8 | Wall clock to instant in both DST directions, `24:00`, a 5:45 offset, date arithmetic, validation |
 | `test/slot-engine.test.ts` | 13 | Rules, notice, horizon, overrides, cross-type conflicts, buffers adding up, busy time, seats, daily limit, the spring-forward walk, the fall-back day, page-and-write agreement, the candidate cap |
-| `test/booking.test.ts` | 13 | Token hash only, answer filtering, off-grid refusal, one winner of two, input validation, jobs written with the booking and sent once, HTML escaping, the host's invite without the manage link and no notice for a booking cancelled first, retry with backoff, atomic reschedule on one chain, the old booking kept on refusal, cancel by token, stale reminders skipped, group seats |
+| `test/booking.test.ts` | 14 | Token hash only, answer filtering, off-grid refusal, one winner of two, input validation, jobs written with the booking and sent once, HTML escaping, the host's invite without the manage link and no notice for a booking cancelled first, retry with backoff, atomic reschedule on one chain, the reschedule list without the booking it moves, the old booking kept on refusal, cancel by token, stale reminders skipped, group seats |
 | `test/edges.test.ts` | 18 | ICS UID, SEQUENCE, CANCEL, escaping and folding; webhook signatures; the private-address guard in every spelling `new URL` produces, every resolved address checked, the connection pinned to them; derived tokens, fail-closed cron auth, signed values, channel token length, sealed secrets; Google and Graph normalization; Google event ids; calendar disconnect, for its own host only and with a dead grant |
 | `test/store-contract*.test.ts` | 5 per store | Booking and refusals, four concurrent requests with one winner, group seats with a daily limit, reschedule into an overlap, job leases |
 
-52 unit tests, plus 5 contract tests for each store that runs. The contract is `test/store-contract.ts`, run
+53 unit tests, plus 5 contract tests for each store that runs. The contract is `test/store-contract.ts`, run
 by one file per store: the in-memory file always, and the file for the host's store, Supabase or Firestore,
 never the other one ([testing-flows.md](testing-flows.md)). The suites are copied as written; tests of the
 host's own go in new files.
@@ -24,7 +24,7 @@ npm i -D vitest
 ```
 
 ```ts
-// vitest.config.ts
+// vitest.config.mts
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
@@ -34,7 +34,8 @@ export default defineConfig({
 });
 ```
 
-Add `"test": "vitest run"` to `package.json`.
+Add `"test": "vitest run"` to `package.json`. The config is `.mts` because it is written as ESM and a Next.js
+app's `package.json` has no `"type": "module"`: under a `.ts` name Vite loads it as CommonJS and warns.
 
 ## Fixtures
 

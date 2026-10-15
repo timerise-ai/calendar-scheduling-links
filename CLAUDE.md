@@ -67,7 +67,7 @@ on) are other skills, not dependencies. They are referenced by name from `SKILL.
   SQL is checked by applying it to that local stack; the anon key must then be refused with `42501`
   (`references/testing.md`). `public/scheduling-embed.js` is checked by reading. Do not add a `package.json`
   to this repository.
-- **Test counts are claims.** `testing.md` and `testing-flows.md` state 8 + 13 + 13 + 18 = 52 unit tests and
+- **Test counts are claims.** `testing.md` and `testing-flows.md` state 8 + 13 + 14 + 18 = 53 unit tests and
   5 contract tests per store; `README.md`, `SKILL.md` and `CHANGELOG.md` repeat them. Change a suite, change
   the numbers.
 - **Keep the three indexes in sync** with `references/`: the quick start and the reference directory in

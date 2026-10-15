@@ -9,7 +9,7 @@ fixtures are in [testing.md](testing.md).
 ```ts
 // test/booking.test.ts: the service and the runner together, against the in-memory store.
 import { describe, expect, it } from 'vitest';
-import { cancelBooking, createBooking, listSlots, rescheduleBooking, SchedulingError } from '@/lib/scheduling/booking-service';
+import { cancelBooking, createBooking, listRescheduleSlots, listSlots, rescheduleBooking, SchedulingError } from '@/lib/scheduling/booking-service';
 import { runDueJobs } from '@/lib/scheduling/runner';
 import { hashToken } from '@/lib/scheduling/tokens';
 import { clock, eventType, memoryStore, recordingCalendar, recordingMailer } from './fixtures';
@@ -188,6 +188,20 @@ describe('booking', () => {
     c.advance(1);
     await runDueJobs(runner, 1000);
     expect(mail.sent.slice(before).some(s => s.subject.startsWith('Reminder'))).toBe(false);
+  });
+
+  it('lists the times a reschedule can take, overlapping the booking it moves, as the write accepts them', async () => {
+    const { deps } = setup(eventType({ durationMinutes: 60, slotIntervalMinutes: 30 }));
+    const { manageToken } = await createBooking(deps, input('2026-10-14T08:00:00Z'));
+    const day = [new Date('2026-10-14T00:00:00Z'), new Date('2026-10-15T00:00:00Z')] as const;
+    const pub = (await listSlots(deps, 'et1', ...day)).map(s => s.start.toISOString());
+    const own = (await listRescheduleSlots(deps, manageToken, ...day)).map(s => s.start.toISOString());
+    // 08:30 overlaps the 08:00 to 09:00 booking: hidden from the public, offered to the one moving it.
+    expect(pub).not.toContain('2026-10-14T08:30:00.000Z');
+    expect(own).toContain('2026-10-14T08:30:00.000Z');
+    const moved = await rescheduleBooking(deps, manageToken, '2026-10-14T08:30:00Z');
+    expect(moved.booking.start.toISOString()).toBe('2026-10-14T08:30:00.000Z');
+    expect(await code(listRescheduleSlots(deps, manageToken, ...day))).toBe('not_confirmed');
   });
 
   it('lets a group slot fill seat by seat', async () => {

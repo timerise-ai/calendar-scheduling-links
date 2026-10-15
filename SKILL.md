@@ -15,7 +15,7 @@ description: >
   reschedule link, cancel link, embed widget, booking webhook, double booking, DST, exclusion constraint,
   btree_gist, pg_cron. Carries one pure slot engine that the page and the write both call, a per-host lock
   with a Postgres exclusion constraint, side effects as leased idempotent jobs, sealed OAuth tokens, signed
-  state and channel tokens, and 52 unit tests plus a store contract run on Supabase and the Firestore
+  state and channel tokens, and 53 unit tests plus a store contract run on Supabase and the Firestore
   emulator. Next.js App Router on Vercel; Supabase by default, Firestore behind the same SchedulingStore
   seam. Not payments, not team round robin in this release, not a video meeting service.
 ---
@@ -113,8 +113,7 @@ work. The rename table is in [data-model.md](references/data-model.md).
 1. Probe the host and fill the seam table and rename table: [adaptation.md](references/adaptation.md),
    [data-model.md](references/data-model.md).
 2. Copy the time helpers and the engine, run their suites: [time-and-slots.md](references/time-and-slots.md),
-   [testing.md](references/testing.md); the flow suites are in
-   [testing-flows.md](references/testing-flows.md).
+   [testing.md](references/testing.md); flow suites in [testing-flows.md](references/testing-flows.md).
 3. Apply the migration and copy the stores: [supabase.md](references/supabase.md) and
    [supabase-stores.md](references/supabase-stores.md), or [firestore.md](references/firestore.md).
 4. Copy the service, tokens and validation, run the booking suite:
@@ -132,8 +131,9 @@ work. The rename table is in [data-model.md](references/data-model.md).
 10. Extend only along [extensions.md](references/extensions.md). Before changing a template, read
     [provenance.md](references/provenance.md).
 
-Copy the templates and the suites as written, the lines a reference calls odd on purpose too; your own tests
-go in new files. The final message itself names every variable and the provider setup still to do.
+Copy the templates and the suites as written, the lines a reference calls odd on purpose too; what you add
+goes in new files. The final message itself names every variable, then what is left to set up: the migration,
+the cron, the e-mail sender, and each OAuth app with its redirect URI.
 
 ## Reference directory
 
