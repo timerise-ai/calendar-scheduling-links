@@ -44,6 +44,8 @@ on) are other skills, not dependencies. They are referenced by name from `SKILL.
 - `.github/workflows/agent-eval.yml`: the caller of the index's reusable eval workflow, copied verbatim from
   section 10 of the standard and run on every published release and on a maintainer's dispatch. It is the
   same in every skill; never edit it, and never add a trigger on `push` or `pull_request`.
+- `.github/cover.svg`: the README cover, rendered from the skill's cover motif on timerise.ai. It is not
+  skill content; redraw it there, not here.
 
 ## Editing conventions
 

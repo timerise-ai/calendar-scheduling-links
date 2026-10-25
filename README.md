@@ -1,5 +1,7 @@
 # calendar-scheduling-links
 
+![calendar-scheduling-links](.github/cover.svg)
+
 [![Agent Skills](https://img.shields.io/badge/Agent_Skills-open_format-059669)](https://agentskills.io)
 [![skills.sh](https://img.shields.io/badge/skills.sh-npx_skills_add-059669)](https://www.skills.sh)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-059669)](https://docs.claude.com/en/docs/claude-code/skills)
@@ -96,6 +98,7 @@ skills its own way, so on a first run invoke it explicitly: `/calendar-schedulin
 | `references/provenance.md` | The audit ledger: fixed, kept deliberately, designed here |
 | `evals/` | `prompts.md` with what an operator types, and one file per agent eval run |
 | `.github/workflows/agent-eval.yml` | Runs the agent evals on every published release |
+| `.github/cover.svg` | The cover at the top of this file: the scheduling link motif from the skill's page on timerise.ai |
 
 The seam is the `SchedulingStore` and `CalendarStore` interfaces plus `currentHostId()` and `Mailer`. They
 bound everything the host app supplies: its database, its auth, its e-mail provider. The look of every
